@@ -1,0 +1,97 @@
+---
+- name: Undo security hardening
+  hosts: all
+  become: yes
+  vars:
+    allowed_ssh_networks:
+      - 192.168.1.0/24
+      - 10.0.0.0/8
+
+  tasks:
+    - name: Remove admin user and group
+      user:
+        name: admin
+        state: absent
+        remove: yes
+      ignore_errors: yes
+
+    - name: Remove admin's sudoers entry
+      file:
+        path: /etc/sudoers.d/admin
+        state: absent
+      ignore_errors: yes
+
+    - name: Restore default sshd_config (replace with your backup or default)
+      copy:
+        src: /etc/ssh/sshd_config.backup
+        dest: /etc/ssh/sshd_config
+        owner: root
+        group: root
+        mode: '0644'
+      ignore_errors: yes
+      notify:
+        - Restart ssh
+
+    - name: Remove admin's SSH authorized_keys directory
+      file:
+        path: /home/admin/.ssh
+        state: absent
+      ignore_errors: yes
+
+    - name: Remove firewalld SSH internal zone settings
+      firewalld:
+        service: ssh
+        zone: public
+        state: enabled
+        immediate: yes
+        permanent: yes
+      ignore_errors: yes
+
+    - name: Remove SSH from internal zone
+      firewalld:
+        service: ssh
+        zone: internal
+        state: disabled
+        immediate: yes
+        permanent: yes
+      ignore_errors: yes
+
+    - name: Remove allowed SSH sources from internal zone
+      firewalld:
+        source: "{{ item }}"
+        zone: internal
+        state: absent
+        immediate: yes
+        permanent: yes
+      loop: "{{ allowed_ssh_networks }}"
+      ignore_errors: yes
+
+    - name: Re-enable services previously disabled
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - postfix
+        - cups
+        - avahi-daemon
+        - rpcbind
+      ignore_errors: yes
+
+    - name: Remove login banner
+      file:
+        path: /etc/issue
+        state: absent
+      ignore_errors: yes
+
+    - name: Remove motd file
+      file:
+        path: /etc/motd
+        state: absent
+      ignore_errors: yes
+
+  handlers:
+    - name: Restart ssh
+      service:
+        name: ssh
+        state: restarted

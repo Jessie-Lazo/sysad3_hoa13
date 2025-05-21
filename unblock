@@ -1,0 +1,10 @@
+- name: Unblock IP using firewalld
+  hosts: firewalls
+  become: yes
+  tasks:
+    - name: Remove firewall rule for source IP
+      ansible.posix.firewalld:
+        rich_rule: 'rule family="ipv4" source address="192.168.56.105" reject'
+        permanent: yes
+        immediate: yes
+        state: disabled
